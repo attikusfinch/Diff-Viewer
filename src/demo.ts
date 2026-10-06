@@ -89,6 +89,15 @@ const tools = {`)
   .replace('  read_diff: readDiff,', '  read_diff: readDiff,\n  show_diff: showDiff,\n  get_review: readFeedback,');
 
 export const demoFiles: Record<string, FileContent> = {
+  ...Object.fromEntries((['png','jpg','webp'] as const).map(extension=>{
+    const path=`assets/preview.${extension}`;
+    const mime=extension==='jpg'?'image/jpeg':`image/${extension}`;
+    const sizes={png:[17977,18261],jpg:[40359,43479],webp:[6242,6486]}[extension];
+    return [path,{path,before:'',after:'',binary:true,language:extension,images:{
+      before:{dataUrl:`/demo/before.${extension}`,mime,bytes:sizes[0],error:null},
+      after:{dataUrl:`/demo/after.${extension}`,mime,bytes:sizes[1],error:null},
+    }}];
+  })),
   'src/mcp/server.ts': { path:'src/mcp/server.ts', before:beforeServer, after:afterServer, binary:false, language:'ts' },
   'src/mcp/tools.ts': { path:'src/mcp/tools.ts', before:`export const tools = ['list_changes', 'read_diff'];\n`, after:`export const tools = [\n  'list_changes',\n  'read_diff',\n  'show_diff',\n  'get_review',\n] as const;\n\nexport type ToolName = (typeof tools)[number];\n`, binary:false, language:'ts' },
   'src/review/comments.ts': { path:'src/review/comments.ts', before:'', after:`import type { ReviewComment } from '../types/review';\n\nconst comments = new Map<string, ReviewComment[]>();\n\nexport async function getReviewComments(): Promise<ReviewComment[]> {\n  return [...comments.values()].flat();\n}\n\nexport async function addComment(comment: ReviewComment) {\n  const existing = comments.get(comment.path) ?? [];\n  comments.set(comment.path, [...existing, comment]);\n}\n`, binary:false, language:'ts' },
@@ -104,9 +113,9 @@ export function demoSnapshot(base = 'working'): Snapshot {
     baseCommit:'9a71c4b', stagedCount:2,
     files: Object.values(demoFiles).map((f,i) => {
       const lines = linesFor(f.before, f.after);
-      return {path:f.path, originalPath:null, status:f.before ? 'M' : 'A',
+      return {path:f.path, originalPath:null, status:f.before||f.images?.before ? 'M' : 'A',
         additions:lines.filter(l=>l.kind==='add').length, deletions:lines.filter(l=>l.kind==='delete').length,
-        binary:false, staged:i===1 || i===4,signature:fingerprint(f.before,f.after)};
+        binary:f.binary, staged:i===4 || i===7,signature:fingerprint(f.images?.before?.dataUrl??f.before,f.images?.after?.dataUrl??f.after)};
     }) };
 }
 export const emptyReview: Review = {reviewed:{},comments:[],plan:{}};

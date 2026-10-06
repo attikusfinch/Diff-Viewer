@@ -94,6 +94,7 @@ fn dispatch(app: &tauri::AppHandle, state: &Shared, method: &str, params: &Value
     let base = params.get("base").and_then(Value::as_str).unwrap_or(&ws.base).to_string();
     let key = review_key(&root, &base);
     match method {
+        "get_preview" => Ok(json!(git::file_preview(&root, &base, string(params, "path")?)?)),
         "get_snapshot" => {
             let snap = git::snapshot(&root, &base)?;
             ws.base = base;
@@ -253,7 +254,7 @@ fn rpc(app: &tauri::AppHandle, state: &Shared, request: Value, session: &str) ->
             }
             let requested = params.get("protocolVersion").and_then(Value::as_str).unwrap_or("2025-11-25");
             let version = if ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28"].contains(&requested) { requested } else { "2025-11-25" };
-            Ok(json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"patchwork","version":"0.1.0"},
+            Ok(json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"patchwork","version":env!("CARGO_PKG_VERSION")},
                 "instructions":"Use open_repository and list_changes, then set_review_plan to suggest files requiring human validation and lower-priority changes with reasons. Use show_diff to present changes. Read get_review to receive human feedback. All tools leave source files unchanged."}))
         },
         "ping" | "notifications/initialized" | "notifications/cancelled" | "bridge/ping" => Ok(json!({})),

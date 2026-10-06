@@ -24,7 +24,10 @@ export interface FileContent {
   after: string;
   binary: boolean;
   language: string;
+  signature?: string;
+  images?: {before: ImageSide | null; after: ImageSide | null};
 }
+export interface ImageSide { dataUrl: string | null; mime: string | null; bytes: number; error: string | null }
 export interface Comment {
   id: string;
   path: string;
@@ -56,6 +59,8 @@ export interface Preferences {
   layout: 'split' | 'unified';
   context: number;
   sidebarWidth: number;
+  filesLayout: 'tree' | 'list';
+  changesExpanded: boolean;
 }
 export type Mode = 'diff' | 'file';
 export interface ShowDiff { root: string; base: string; path?: string; line?: number; mode?: Mode }

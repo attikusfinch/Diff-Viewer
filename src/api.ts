@@ -18,7 +18,7 @@ export async function api<T>(method: string, params: Record<string, unknown> = {
       snapshot.base = base;
       result = {...snapshot, files: base === 'staged' ? snapshot.files.filter(f=>f.staged) : snapshot.files}; break;
     }
-    case 'get_file': result = demoFiles[String(params.path)]; break;
+    case 'get_file': case 'get_preview': result = demoFiles[String(params.path)]; break;
     case 'get_review': result = review; break;
     case 'set_review_plan': {
       const entries=params.files as {path:string;priority:'validate'|'normal'|'low';reason?:string}[];

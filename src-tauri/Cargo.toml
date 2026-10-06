@@ -1,6 +1,6 @@
 [package]
 name = "patchwork"
-version = "0.1.0"
+version = "0.1.1"
 description = "A quiet workspace for reviewing agent-written code"
 edition = "2021"
 
@@ -15,6 +15,7 @@ serde_json = "1"
 tiny_http = "0.12"
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
+base64 = "0.22"
 
 [profile.release]
 panic = "abort"

@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { version } from '../package.json';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import { ArrowDown, ArrowUp, Braces, Check, CheckCheck, ChevronDown, ChevronRight, Columns2, Command, Copy, FileCode2, Files, FolderOpen, GitBranch, GitCommitHorizontal, GitCompareArrows, Keyboard, List, LoaderCircle, Menu, MessageSquare, Minus, PanelLeftClose, PanelLeftOpen, Palette, Plug, Plus, RefreshCw, Search, Settings2, ShieldCheck, SquareTerminal, WrapText, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Braces, Check, CheckCheck, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Command, Copy, FileCode2, Files, FolderOpen, FolderTree, GitBranch, GitCommitHorizontal, GitCompareArrows, Keyboard, List, LoaderCircle, Menu, MessageSquare, Minus, PanelLeftClose, PanelLeftOpen, Palette, Plug, Plus, RefreshCw, Search, Settings2, ShieldCheck, SquareTerminal, WrapText, X } from 'lucide-react';
 import { api, desktop } from './api';
 import { demoReview, demoSnapshot, emptyReview } from './demo';
 import { fingerprint } from './diff';
 import DiffView from './components/DiffView';
+import ImagePreview from './components/ImagePreview';
 import type { DiffHandle } from './components/DiffView';
 import FileTree, { FileIcon } from './components/FileTree';
+import type { FileTreeHandle } from './components/FileTree';
 import Modal from './components/Modal';
 import type { Connection, FileContent, Mode, Preferences, Review, ShowDiff, Snapshot } from './types';
 
-const defaults: Preferences = {theme:'graphite',fontSize:13,wrap:false,layout:'split',context:4,sidebarWidth:272};
+const defaults: Preferences = {theme:'graphite',fontSize:13,wrap:false,layout:'split',context:4,sidebarWidth:272,filesLayout:'tree',changesExpanded:true};
 const themeNames = {graphite:'Graphite',midnight:'Midnight',light:'Daylight',terminal:'Terminal'};
 const mod = /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl';
 function stored<T>(key:string,fallback:T):T { try {return JSON.parse(localStorage.getItem(key)??'null')??fallback}catch{return fallback} }
@@ -20,11 +23,14 @@ const initialPreferences=stored<Preferences>('patchwork.preferences',defaults);
 function validatedPreferences():Preferences {
   return {...defaults,...initialPreferences, theme:initialPreferences.theme in themeNames ? initialPreferences.theme : 'graphite',
     fontSize:Math.max(11,Math.min(18,Number(initialPreferences.fontSize)||13)),
-    sidebarWidth:Math.max(220,Math.min(420,Number(initialPreferences.sidebarWidth)||272))};
+    sidebarWidth:Math.max(220,Math.min(420,Number(initialPreferences.sidebarWidth)||272)),
+    filesLayout:initialPreferences.filesLayout==='list'?'list':'tree',
+    changesExpanded:initialPreferences.changesExpanded!==false};
 }
 const languages:Record<string,string>={ts:'TypeScript',tsx:'TypeScript React',js:'JavaScript',jsx:'JavaScript React',rs:'Rust',json:'JSON',md:'Markdown',py:'Python',css:'CSS',html:'HTML',toml:'TOML',yml:'YAML',yaml:'YAML'};
 const tools = ['open_repository','list_changes','get_diff','get_file','show_diff','get_review','add_comment','set_review_plan'];
 const priorityOrder={validate:0,normal:1,low:2};
+function contentFingerprint(file:FileContent) {return file.signature||fingerprint(file.images?.before?.dataUrl??file.before,file.images?.after?.dataUrl??file.after)}
 
 export default function App() {
   const [snapshot,setSnapshot]=useState<Snapshot|null>(desktop?null:demoSnapshot());
@@ -35,7 +41,7 @@ export default function App() {
   const [prefs,setPrefs]=useState<Preferences>(validatedPreferences);
   const [mode,setMode]=useState<Mode>('diff');
   const [filter,setFilter]=useState('');
-  const [flat,setFlat]=useState(false);
+  const [foldersCollapsed,setFoldersCollapsed]=useState(false);
   const [sidebar,setSidebar]=useState(()=>window.innerWidth>=900);
   const [reviewPanel,setReviewPanel]=useState(false);
   const [modal,setModal]=useState<'settings'|'agents'|'commands'|'commit'|'repository'|null>(null);
@@ -61,6 +67,7 @@ export default function App() {
   const [recent,setRecent]=useState<string[]>(stored('patchwork.recent',[]));
   const [seenSignatures,setSeenSignatures]=useState<Record<string,string>>({});
   const diffRef=useRef<DiffHandle>(null);
+  const treeRef=useRef<FileTreeHandle>(null);
   const fileFilter=useRef<HTMLInputElement>(null);
   const findInput=useRef<HTMLInputElement>(null);
   const commentInput=useRef<HTMLTextAreaElement>(null);
@@ -115,13 +122,13 @@ export default function App() {
   },[load,recent]);
   useEffect(()=>{
     if(!selected||!snapshot){setFile(null);return;}
-    let active=true;setFileBusy(true);setFileError('');
-    void api<FileContent>('get_file',{path:selected,base:snapshot.base}).then(next=>{
+    let active=true;setFileBusy(true);setFileError('');setCounts({hunks:0,matches:0});setFindOpen(false);
+    void api<FileContent>('get_preview',{path:selected,base:snapshot.base}).then(next=>{
       if(!active)return;setFile(next);
-      setSeenSignatures(prev=>({...prev,[next.path]:fingerprint(next.before,next.after)}));
+      setSeenSignatures(prev=>({...prev,[next.path]:contentFingerprint(next)}));
     }).catch(e=>{if(active){setFile(null);setFileError(String(e))}}).finally(()=>{if(active)setFileBusy(false)});
     return ()=>{active=false};
-  },[selected,snapshot?.root,snapshot?.base,snapshot?.baseCommit,revision]);
+  },[selected,snapshot?.root,snapshot?.base,snapshot?.baseCommit,snapshot?.files.find(f=>f.path===selected)?.signature,revision]);
   useEffect(()=>{
     if(!desktop)return;
     let active=true,inFlight=false;
@@ -131,10 +138,7 @@ export default function App() {
         const info=await api<Connection>('get_connection');if(active)setConnection(info);
         if(snapshotRef.current){
           const next=await api<Snapshot>('get_snapshot',{base:baseRef.current});
-          if(active&&JSON.stringify(next)!==JSON.stringify(snapshotRef.current)){setSnapshot(next);setRevision(v=>v+1);}
-          const path=selectedRef.current,base=baseRef.current,root=snapshotRef.current.root;
-          if(path){const updated=await api<FileContent>('get_file',{path,base});
-            if(active&&!busyRef.current&&path===selectedRef.current&&base===baseRef.current&&root===snapshotRef.current?.root){setFile(prev=>prev&&prev.before===updated.before&&prev.after===updated.after?prev:updated);setSeenSignatures(prev=>({...prev,[path]:fingerprint(updated.before,updated.after)}));}}
+          if(active&&JSON.stringify(next)!==JSON.stringify(snapshotRef.current))setSnapshot(next);
         }
       }catch{/* Explicit refresh reports errors; background polling keeps the last readable state. */}
       finally{inFlight=false}
@@ -185,10 +189,10 @@ export default function App() {
     const entry=snapshot?.files.find(f=>f.path===path);return entry?.signature===hash || (!entry?.signature && seenSignatures[path]===hash);
   }));
   const reviewedCount=snapshot?.files.filter(f=>validReviewed[f.path]).length??0;
-  const isReviewed=!!(file&&review.reviewed[file.path]===(current?.signature??fingerprint(file.before,file.after)));
+  const isReviewed=!!(file&&review.reviewed[file.path]===(current?.signature??contentFingerprint(file)));
   const markReviewed=useCallback(async()=>{
     if(!file||!snapshot)return;
-    try{const next=await api<Review>('set_reviewed',{path:selected,base:snapshot.base,reviewed:!isReviewed,fingerprint:current?.signature??fingerprint(file.before,file.after)});setReview(next);}
+    try{const next=await api<Review>('set_reviewed',{path:selected,base:snapshot.base,reviewed:!isReviewed,fingerprint:current?.signature??contentFingerprint(file)});setReview(next);}
     catch(e){setError(String(e))}
   },[file,snapshot,selected,isReviewed,current?.signature]);
   function commentAt(line:number,side:'before'|'after') {setCommentLine(line);setCommentSide(side);setReviewPanel(true);setTimeout(()=>commentInput.current?.focus(),40)}
@@ -219,6 +223,8 @@ export default function App() {
     {title:'Commit staged changes',detail:'Write a commit message',shortcut:'',icon:GitCommitHorizontal,action:()=>setModal('commit')},
     {title:'Appearance & settings',detail:'Theme, editor and shortcuts',shortcut:`${mod}+,`,icon:Palette,action:()=>setModal('settings')},
     {title:'Toggle file explorer',detail:'Make more room for code',shortcut:`${mod}+B`,icon:Files,action:()=>setSidebar(v=>!v)},
+    {title:prefs.filesLayout==='tree'?'Show files without folders':'Show folder tree',detail:'Change the Changes list layout',shortcut:'',icon:List,action:()=>preference('filesLayout',prefs.filesLayout==='tree'?'list':'tree')},
+    {title:prefs.changesExpanded?'Collapse changes':'Expand changes',detail:'Fold the changed file list',shortcut:'',icon:ChevronDown,action:()=>preference('changesExpanded',!prefs.changesExpanded)},
     {title:'Toggle review comments',detail:'Read and leave feedback',shortcut:'',icon:MessageSquare,action:()=>setReviewPanel(v=>!v)},
     ...(planCount?[{title:'Clear agent review plan',detail:'Remove suggested priorities for this comparison',shortcut:'',icon:X,action:()=>void clearPlan()}]:[]),
     ...orderedFiles.map(f=>({title:f.path,detail:review.plan[f.path]?.priority==='validate'?'Needs validation':review.plan[f.path]?.priority==='low'?'Lower priority':'Open changed file',shortcut:f.status,icon:FileCode2,action:()=>selectFile(f.path)})),
@@ -234,7 +240,7 @@ export default function App() {
       if(modal)return;
       if(command&&e.key.toLowerCase()==='o'){e.preventDefault();void openRepository();return;}
       if(command&&e.key.toLowerCase()==='b'){e.preventDefault();setSidebar(v=>!v);return;}
-      if(command&&e.key.toLowerCase()==='f'){e.preventDefault();if(e.shiftKey){setSidebar(true);setTimeout(()=>fileFilter.current?.focus(),30)}else{setFindOpen(true);setTimeout(()=>findInput.current?.focus(),30)}return;}
+      if(command&&e.key.toLowerCase()==='f'){e.preventDefault();if(e.shiftKey){setSidebar(true);preference('changesExpanded',true);setTimeout(()=>fileFilter.current?.focus(),30)}else if(!file?.binary){setFindOpen(true);setTimeout(()=>findInput.current?.focus(),30)}return;}
       if(command&&e.shiftKey&&e.key.toLowerCase()==='r'){e.preventDefault();void load();return;}
       if(command&&e.key==='Enter'){e.preventDefault();setModal('commit');return;}
       if(e.key==='Escape'){setFindOpen(false);setSearch('');return;}
@@ -260,7 +266,7 @@ export default function App() {
 
   return <div className="app-shell">
     <header className="titlebar">
-      <div className="brand"><img src="/logo.svg" alt="" width="27" height="27"/><span>patchwork<span className="brand-dot">.</span></span><span className="app-version">v0.1</span></div>
+      <div className="brand"><img src="/logo.svg" alt="" width="27" height="27"/><span>patchwork<span className="brand-dot">.</span></span><span className="app-version">v{version}</span></div>
       <button className="workspace-switch" onClick={()=>void openRepository()} title="Open a repository"><FolderOpen size={14}/><span>{snapshot?.name??'Open workspace'}</span><ChevronDown size={12}/></button>
       <button className="command-trigger" onClick={()=>{setCommandQuery('');setModal('commands')}}><Search size={14}/><span>Find a file or run a command…</span><kbd>{mod} K</kbd></button>
       <div className="title-actions"><button className="connect-button" onClick={()=>setModal('agents')}><Plug size={14}/><span>{connection?.clients.length?`${connection.clients.length} agent${connection.clients.length===1?'':'s'}`:'Connect agent'}</span>{!!connection?.clients.length&&<span className="live-dot"/>}</button><button className="icon-button" title="Settings" aria-label="Settings" onClick={()=>setModal('settings')}><Settings2 size={16}/></button></div>
@@ -277,13 +283,22 @@ export default function App() {
       </nav>
 
       {sidebar&&<aside className="explorer" style={{width:prefs.sidebarWidth}}>
-        <div className="explorer-heading"><span>Explorer</span><div><button className="icon-button" title="Toggle tree / list" aria-label="Toggle tree or list view" aria-pressed={flat} onClick={()=>setFlat(v=>!v)}><List size={15}/></button><button className="icon-button" title="Refresh changes" aria-label="Refresh changes" disabled={busy||!snapshot} onClick={()=>void load()}><RefreshCw size={14} className={busy?'spinning':''}/></button></div></div>
+        <div className="explorer-heading"><span>Explorer</span><div><button className="icon-button" title="Refresh changes" aria-label="Refresh changes" disabled={busy||!snapshot} onClick={()=>void load()}><RefreshCw size={14} className={busy?'spinning':''}/></button></div></div>
         <button className="repository-row" onClick={()=>void openRepository()}><FolderOpen size={16}/><span>{snapshot?.name??'No repository'}</span><ChevronDown size={13}/></button>
         {snapshot&&<div className="repository-branch"><GitBranch size={12}/><span>{snapshot.branch}</span></div>}
-        <label className="file-filter"><Search size={13}/><input ref={fileFilter} value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter changed files…" aria-label="Filter changed files"/><span>{mod} ⇧ F</span></label>
-        <div className="changes-label"><ChevronDown size={13}/><span>Changes</span><span className="count-badge">{snapshot?.files.length??0}</span><div className="change-totals"><span className="added-text">+{additions}</span><span className="deleted-text">−{deletions}</span></div></div>
-        {!!planCount&&<div className="agent-plan-label"><Plug size={12}/><span>Agent review plan</span><button className="icon-button" title="Clear agent review plan" aria-label="Clear agent review plan" onClick={()=>void clearPlan()}><X size={12}/></button></div>}
-        <div className="tree-scroll"><FileTree files={visibleFiles} selected={selected} reviewed={validReviewed} plan={review.plan} flat={flat} onSelect={selectFile} onStage={stageFile}/></div>
+        <div className="changes-label"><button className="changes-toggle" aria-label={prefs.changesExpanded?'Collapse changes':'Expand changes'} aria-expanded={prefs.changesExpanded} aria-controls="changed-files" onClick={()=>preference('changesExpanded',!prefs.changesExpanded)}>
+          {prefs.changesExpanded?<ChevronDown size={13}/>:<ChevronRight size={13}/>}<span>Changes</span><span className="count-badge">{snapshot?.files.length??0}</span></button>
+          <div className="change-totals"><span className="added-text">+{additions}</span><span className="deleted-text">−{deletions}</span></div></div>
+        <div id="changed-files" className="changes-content" hidden={!prefs.changesExpanded}>
+          <div className="changes-view-bar"><div className="view-switch" role="group" aria-label="Changes layout">
+            <button className={prefs.filesLayout==='tree'?'active':''} aria-pressed={prefs.filesLayout==='tree'} title="Group files into collapsible folders" onClick={()=>preference('filesLayout','tree')}><FolderTree size={13}/>Folders</button>
+            <button className={prefs.filesLayout==='list'?'active':''} aria-pressed={prefs.filesLayout==='list'} title="Show files without folder rows" onClick={()=>preference('filesLayout','list')}><List size={13}/>Files</button>
+          </div>{prefs.filesLayout==='tree'&&<button className="icon-button" title={filter?'Clear the filter to fold folders':foldersCollapsed?'Expand all folders':'Collapse all folders'} aria-label={foldersCollapsed?'Expand all folders':'Collapse all folders'} disabled={!!filter||!visibleFiles.some(f=>f.path.includes('/'))} onClick={()=>foldersCollapsed?treeRef.current?.expandAll():treeRef.current?.collapseAll()}>
+            {foldersCollapsed?<ChevronsUpDown size={15}/>:<ChevronsDownUp size={15}/>}</button>}</div>
+          <label className="file-filter"><Search size={13}/><input ref={fileFilter} value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter changed files…" aria-label="Filter changed files"/><span>{mod} ⇧ F</span></label>
+          {!!planCount&&<div className="agent-plan-label"><Plug size={12}/><span>Agent review plan</span><button className="icon-button" title="Clear agent review plan" aria-label="Clear agent review plan" onClick={()=>void clearPlan()}><X size={12}/></button></div>}
+          <div className="tree-scroll"><FileTree ref={treeRef} files={visibleFiles} selected={selected} reviewed={validReviewed} plan={review.plan} flat={prefs.filesLayout==='list'} filtering={!!filter} onSelect={selectFile} onStage={stageFile} onCollapseChange={setFoldersCollapsed}/></div>
+        </div>
         <div className="explorer-bottom">
           {snapshot&&<><div className="review-progress-label"><span><CheckCheck size={13}/>Review progress</span><span>{reviewedCount} / {snapshot.files.length}</span></div><progress max={snapshot.files.length||1} value={reviewedCount} aria-label="Files reviewed"/>
           <div className="staging-row"><span><GitCommitHorizontal size={14}/>{snapshot.stagedCount} staged</span><button className="text-button" disabled={busy||!snapshot.files.length} onClick={()=>void mutate('stage_all',{staged:true},'All changes staged')}>Stage all<Plus size={12}/></button></div>
@@ -321,13 +336,13 @@ export default function App() {
             <div className="view-switch" aria-label="Editor view"><button className={mode==='diff'?'active':''} aria-pressed={mode==='diff'} onClick={()=>setMode('diff')}>Diff</button><button className={mode==='file'?'active':''} aria-pressed={mode==='file'} onClick={()=>setMode('file')}>Full file</button></div>
             <div className="toolbar-divider"/>
             <button className={`icon-button ${prefs.layout==='split'?'selected-tool':''}`} title={prefs.layout==='split'?'Switch to unified diff':'Switch to split diff'} aria-label="Toggle split or unified diff" disabled={mode==='file'} onClick={()=>preference('layout',prefs.layout==='split'?'unified':'split')}><Columns2 size={15}/></button>
-            <button className={`icon-button ${prefs.wrap?'selected-tool':''}`} title="Toggle word wrap" aria-label="Toggle word wrap" aria-pressed={prefs.wrap} onClick={()=>preference('wrap',!prefs.wrap)}><WrapText size={16}/></button>
-            <button className="icon-button" title="Copy file contents" aria-label="Copy file contents" disabled={!file||fileBusy} onClick={()=>void copy(file!.after)}><Copy size={14}/></button>
-            <button className="icon-button" title="Find in file" aria-label="Find in file" onClick={()=>{setFindOpen(v=>!v);setTimeout(()=>findInput.current?.focus(),30)}}><Search size={14}/></button>
+            <button className={`icon-button ${prefs.wrap?'selected-tool':''}`} title="Toggle word wrap" aria-label="Toggle word wrap" aria-pressed={prefs.wrap} disabled={file?.binary} onClick={()=>preference('wrap',!prefs.wrap)}><WrapText size={16}/></button>
+            <button className="icon-button" title="Copy file contents" aria-label="Copy file contents" disabled={!file||fileBusy||file.binary} onClick={()=>void copy(file!.after)}><Copy size={14}/></button>
+            <button className="icon-button" title="Find in file" aria-label="Find in file" disabled={file?.binary} onClick={()=>{setFindOpen(v=>!v);setTimeout(()=>findInput.current?.focus(),30)}}><Search size={14}/></button>
           </div>
           <div className="file-info-bar"><FileIcon path={selected} size={14}/><span className="file-info-name">{selected.split('/').at(-1)}</span><span className={`change-type status-${current?.status}`}>{({A:'Added',M:'Modified',D:'Deleted',R:'Renamed'} as Record<string,string>)[current?.status??'']??'File'}</span>
-            {current&&<><span className="added-text">+{current.additions}</span><span className="deleted-text">−{current.deletions}</span></>}
-            <span className="comparison-spacer"/><span className="hunk-count">{counts.hunks} {counts.hunks===1?'change':'changes'}</span>
+            {current&&(current.binary?<span className="hunk-count">Binary change</span>:<><span className="added-text">+{current.additions}</span><span className="deleted-text">−{current.deletions}</span></>)}
+            <span className="comparison-spacer"/><span className="hunk-count">{file?.images?'Image comparison':`${counts.hunks} ${counts.hunks===1?'change':'changes'}`}</span>
             <button className="icon-button" title="Previous change (Alt+↑)" aria-label="Previous change" onClick={()=>diffRef.current?.hunk(-1)} disabled={!counts.hunks}><ArrowUp size={14}/></button>
             <button className="icon-button" title="Next change (Alt+↓)" aria-label="Next change" onClick={()=>diffRef.current?.hunk(1)} disabled={!counts.hunks}><ArrowDown size={14}/></button>
             <div className="toolbar-divider"/>
@@ -341,11 +356,11 @@ export default function App() {
             </div>
             {selectedPlan.reason&&<p>{selectedPlan.reason}</p>}
           </div>}
-          {findOpen&&<div className="find-bar"><Search size={14}/><input ref={findInput} autoFocus placeholder="Find in this file…" aria-label="Find in this file" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')diffRef.current?.find(e.shiftKey?-1:1)}}/><span>{counts.matches} matching lines</span><button className="icon-button" aria-label="Previous match" onClick={()=>diffRef.current?.find(-1)}><ArrowUp size={14}/></button><button className="icon-button" aria-label="Next match" onClick={()=>diffRef.current?.find(1)}><ArrowDown size={14}/></button><button className="icon-button" aria-label="Close find" onClick={()=>{setFindOpen(false);setSearch('')}}><X size={14}/></button></div>}
+          {findOpen&&!file?.binary&&<div className="find-bar"><Search size={14}/><input ref={findInput} autoFocus placeholder="Find in this file…" aria-label="Find in this file" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')diffRef.current?.find(e.shiftKey?-1:1)}}/><span>{counts.matches} matching lines</span><button className="icon-button" aria-label="Previous match" onClick={()=>diffRef.current?.find(-1)}><ArrowUp size={14}/></button><button className="icon-button" aria-label="Next match" onClick={()=>diffRef.current?.find(1)}><ArrowDown size={14}/></button><button className="icon-button" aria-label="Close find" onClick={()=>{setFindOpen(false);setSearch('')}}><X size={14}/></button></div>}
           {fileBusy||(!!file&&file.path!==selected)?<div className="code-skeleton" aria-label="Loading file">{Array.from({length:16},(_,i)=><div key={i} style={{width:`${[44,62,38,75,56,30][i%6]}%`}}/>)}</div>:
             fileError?<div className="editor-empty"><FileCode2 size={32}/><h2>Could not read this file</h2><p>{fileError}</p><button className="primary-button" onClick={()=>setRevision(v=>v+1)}>Try again</button></div>:
-            file&&<DiffView ref={diffRef} file={file} mode={mode} preferences={prefs} search={search} comments={selectedComments} onLine={commentAt} onCounts={onCounts}/>}
-          <div className="editor-footnote"><span><MessageSquare size={12}/>Click a line number to leave a review comment</span><span><kbd>J</kbd><kbd>K</kbd> files <span className="hint-divider">/</span><kbd>D</kbd> full file <span className="hint-divider">/</span><kbd>R</kbd> reviewed</span></div>
+            file&&(file.images?<ImagePreview key={`${snapshot.root}:${snapshot.base}:${file.path}`} file={file} mode={mode} layout={prefs.layout}/>:<DiffView ref={diffRef} file={file} mode={mode} preferences={prefs} search={search} comments={selectedComments} onLine={commentAt} onCounts={onCounts}/>)}
+          <div className="editor-footnote"><span><MessageSquare size={12}/>{file?.images?'Open Review to leave feedback on this image':'Click a line number to leave a review comment'}</span><span><kbd>J</kbd><kbd>K</kbd> files <span className="hint-divider">/</span><kbd>D</kbd> full file <span className="hint-divider">/</span><kbd>R</kbd> reviewed</span></div>
         </>:<div className="welcome-screen"><div className="welcome-mark"><Braces size={58}/><span>+</span></div><span className="welcome-product">patchwork.</span><h1>{snapshot?'A little clarity between commits.':'Your agent writes. You see the whole picture.'}</h1><p>{snapshot?(snapshot.files.length?'Choose a file to start reviewing the changes.':'The comparison is clean. Switch the base to review branch changes.'):'Open a Git repository, connect your agent, and make every change a little easier to understand.'}</p>
           <div className="welcome-actions"><button className="primary-button" onClick={()=>void openRepository()}><FolderOpen size={16}/>Open repository<kbd>{mod} O</kbd></button><button className="secondary-button" onClick={()=>setModal('agents')}><Plug size={16}/>Connect an agent</button></div>
           {recent.length>0&&<div className="recent-repos"><h3>Recent workspaces</h3>{recent.map(path=><button key={path} onClick={()=>void load('working',path)}><FolderOpen size={14}/><span>{path.split(/[\\/]/).at(-1)}</span><small>{path}</small><ChevronRight size={12}/></button>)}</div>}
@@ -364,7 +379,7 @@ export default function App() {
     </div>
 
     <footer className="statusbar"><div><GitBranch size={12}/><span>{snapshot?.branch??'No repository'}</span>{snapshot&&<><span className="status-separator"/><span>{snapshot.files.length} changed</span><span className="added-text">+{additions}</span><span className="deleted-text">−{deletions}</span></>}</div>
-      <div className="status-middle"><ShieldCheck size={11}/>Local workspace</div><div><button onClick={()=>setModal('agents')}><span className={`status-dot ${connection?.available?'ready':''}`}/>{desktop?(connection?.available?'MCP ready':'MCP unavailable'):'MCP · desktop required'}</button><span className="status-separator"/><span>{file?languages[file.language]??file.language.toUpperCase():'Patchwork'}</span><span>UTF-8</span><button onClick={()=>{setSettingsTab('appearance');setModal('settings')}}><Palette size={11}/>{themeNames[prefs.theme]}</button></div>
+      <div className="status-middle"><ShieldCheck size={11}/>Local workspace</div><div><button onClick={()=>setModal('agents')}><span className={`status-dot ${connection?.available?'ready':''}`}/>{desktop?(connection?.available?'MCP ready':'MCP unavailable'):'MCP · desktop required'}</button><span className="status-separator"/><span>{file?languages[file.language]??file.language.toUpperCase():'Patchwork'}</span><span>{file?.images?'Image':file?.binary?'Binary':'UTF-8'}</span><button onClick={()=>{setSettingsTab('appearance');setModal('settings')}}><Palette size={11}/>{themeNames[prefs.theme]}</button></div>
     </footer>
 
     {toast&&<div className="toast" role="status"><Check size={15}/><span>{toast}</span><button aria-label="Dismiss notification" onClick={()=>setToast('')}><X size={13}/></button></div>}

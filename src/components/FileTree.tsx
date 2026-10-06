@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
-import { ArrowDown, Check, ChevronDown, ChevronRight, FileCode2, FileJson2, FileText, Folder, FolderOpen, Minus, Plus, ShieldCheck } from 'lucide-react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { ArrowDown, Check, ChevronDown, ChevronRight, FileCode2, FileJson2, FileText, Folder, FolderOpen, Image as ImageIcon, Minus, Plus, ShieldCheck } from 'lucide-react';
 import type { ChangedFile, ReviewPlanItem } from '../types';
 
 export function FileIcon({path,size=15}: {path:string;size?:number}) {
+  if (/\.(png|jpe?g|webp)$/i.test(path)) return <ImageIcon size={size} className="file-icon text"/>;
   if (path.endsWith('.json')) return <FileJson2 size={size} className="file-icon json"/>;
   if (/\.(md|txt)$/.test(path)) return <FileText size={size} className="file-icon text"/>;
   return <FileCode2 size={size} className={`file-icon ${/\.(ts|tsx)$/.test(path)?'typescript':/\.(rs)$/.test(path)?'rust':''}`}/>;
@@ -10,9 +11,11 @@ export function FileIcon({path,size=15}: {path:string;size?:number}) {
 
 interface Node {name:string;path:string;file?:ChangedFile;children:Map<string,Node>}
 interface Props {
-  files:ChangedFile[]; selected:string; reviewed:Record<string,string>; plan:Record<string,ReviewPlanItem>; flat:boolean;
+  files:ChangedFile[]; selected:string; reviewed:Record<string,string>; plan:Record<string,ReviewPlanItem>; flat:boolean; filtering:boolean;
   onSelect:(path:string)=>void; onStage:(path:string,staged:boolean)=>void;
+  onCollapseChange:(collapsed:boolean)=>void;
 }
+export interface FileTreeHandle {collapseAll:()=>void;expandAll:()=>void}
 function buildTree(files:ChangedFile[]):Node {
     const root:Node={name:'',path:'',children:new Map()};
     for(const file of files) {
@@ -26,10 +29,10 @@ function buildTree(files:ChangedFile[]):Node {
     }
     return root;
 }
-export default function FileTree({files,selected,reviewed,plan,flat,onSelect,onStage}:Props) {
+export default forwardRef<FileTreeHandle,Props>(function FileTree({files,selected,reviewed,plan,flat,filtering,onSelect,onStage,onCollapseChange},ref) {
   const [collapsed,setCollapsed]=useState<Set<string>>(new Set());
   const groups=useMemo(()=>{
-    if(!Object.keys(plan).length)return [{key:'all',label:'',files,tree:buildTree(files)}];
+    if(!files.some(file=>plan[file.path]))return [{key:'all',label:'',files,tree:buildTree(files)}];
     return [
       {key:'validate',label:'Needs validation'},
       {key:'normal',label:'Other changes'},
@@ -39,6 +42,20 @@ export default function FileTree({files,selected,reviewed,plan,flat,onSelect,onS
       return {...group,files:grouped,tree:buildTree(grouped)};
     }).filter(group=>group.files.length);
   },[files,plan]);
+  const folderKeys=useMemo(()=>{
+    const keys:string[]=[];
+    function collect(node:Node,group:string) {
+      for(const child of node.children.values())if(!child.file){keys.push(`${group}/${child.path}`);collect(child,group);}
+    }
+    for(const group of groups)collect(group.tree,group.key);
+    return keys;
+  },[groups]);
+  useImperativeHandle(ref,()=>({
+    collapseAll:()=>setCollapsed(prev=>new Set([...prev,...folderKeys])),
+    expandAll:()=>setCollapsed(prev=>new Set([...prev].filter(key=>!folderKeys.includes(key)))),
+  }),[folderKeys]);
+  const allCollapsed=folderKeys.length>0&&folderKeys.every(key=>collapsed.has(key));
+  useEffect(()=>{onCollapseChange(allCollapsed)},[allCollapsed,onCollapseChange]);
   function toggle(key:string) {setCollapsed(prev=>{const next=new Set(prev);if(next.has(key))next.delete(key);else next.add(key);return next;})}
   function fileRow(file:ChangedFile,depth:number,flat=false) {
     const name=file.path.split('/').at(-1)!;
@@ -63,7 +80,7 @@ export default function FileTree({files,selected,reviewed,plan,flat,onSelect,onS
   function nodes(node:Node,depth:number,group:string):React.ReactNode {
     return [...node.children.values()].sort((a,b)=>Number(!!a.file)-Number(!!b.file)||a.name.localeCompare(b.name)).map(child=>{
       if(child.file)return fileRow(child.file,depth);
-      const key=`${group}/${child.path}`,closed=collapsed.has(key);
+      const key=`${group}/${child.path}`,closed=!filtering&&collapsed.has(key);
       return <div key={child.path}>
         <button className="folder-row" style={{paddingLeft:10+depth*16}} onClick={()=>toggle(key)} aria-expanded={!closed}>
           {closed?<ChevronRight size={13}/>:<ChevronDown size={13}/>}{closed?<Folder size={15}/>:<FolderOpen size={15}/>}
@@ -75,7 +92,7 @@ export default function FileTree({files,selected,reviewed,plan,flat,onSelect,onS
   }
   if(!files.length)return <div className="no-files">No matching files.</div>;
   return <div className="file-tree">{groups.map(group=>{
-    const closed=collapsed.has(`group/${group.key}`);
+    const closed=!filtering&&collapsed.has(`group/${group.key}`);
     return <section key={group.key} aria-label={group.label||'Changed files'}>
       {group.label&&<button className={`review-group group-${group.key}`} onClick={()=>toggle(`group/${group.key}`)} aria-expanded={!closed}>
         {closed?<ChevronRight size={12}/>:<ChevronDown size={12}/>}
@@ -85,4 +102,4 @@ export default function FileTree({files,selected,reviewed,plan,flat,onSelect,onS
       {!closed&&(flat?group.files.map(f=>fileRow(f,0,true)):nodes(group.tree,0,group.key))}
     </section>;
   })}</div>;
-}
+});
