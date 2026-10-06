@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/icons/android/
+src-tauri/icons/ios/
+*.log
+*.tsbuildinfo
+.qa/
+.DS_Store
