@@ -83,7 +83,11 @@ pub fn repository(path: &str) -> Result<PathBuf, String> {
 
 pub fn safe_path(root: &Path, path: &str) -> Result<PathBuf, String> {
     let relative = Path::new(path);
-    if path.is_empty() || relative.components().any(|p| !matches!(p, Component::Normal(_)))
+    // Unix treats Windows drive/UNC paths as relative filenames. Reject them
+    // explicitly so the same MCP path has the same scope on every platform.
+    let windows_prefix = path.as_bytes().get(1) == Some(&b':') && path.as_bytes()[0].is_ascii_alphabetic();
+    if path.is_empty() || windows_prefix || path.starts_with('\\')
+        || relative.components().any(|p| !matches!(p, Component::Normal(_)))
         || relative.components().any(|p| matches!(p, Component::Normal(s) if s.to_string_lossy().eq_ignore_ascii_case(".git"))) {
         return Err("File must be a relative path inside the repository.".into());
     }
@@ -373,6 +377,18 @@ mod tests {
         assert!(safe_path(&r.0, ".git/config").is_err());
         assert!(safe_path(&r.0, "C:/Windows/system.ini").is_err());
         assert!(resolve_base(&r.0, "--output=file").is_err());
+    }
+    #[test]
+    fn absolute_paths_are_rejected_on_every_platform() {
+        let r = Repo::new();
+        for path in ["/etc/passwd", "C:/Windows/system.ini", r"C:\Windows\system.ini",
+            "C:secret.txt", r"\\server\share\secret", r"\Windows\system.ini"] {
+            assert!(safe_path(&r.0, path).is_err(), "Accepted absolute or drive-relative path: {path}");
+        }
+        for path in ["assets/preview.png", "docs/readme with spaces.md"] {
+            assert!(safe_path(&r.0, path).is_ok(), "Rejected repository path: {path}");
+        }
+        #[cfg(unix)] assert!(safe_path(&r.0, "docs/topic:details.md").is_ok());
     }
     #[test]
     fn review_signature_changes_with_either_side() {

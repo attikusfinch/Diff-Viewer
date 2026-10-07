@@ -1,48 +1,50 @@
 # Patchwork
 
-Локальный diff viewer для Windows и macOS: агент пишет код, вы проверяете изменения и возвращаете ему конкретные комментарии через MCP.
+**English** | [Русский](README.ru.md)
 
-## Возможности
+A local diff viewer for Windows and macOS. Your agent writes the code; you review the changes and send specific feedback through MCP.
 
-- Дерево изменённых файлов с `+N / −M` у каждого файла, фильтр, вкладки, изменение ширины панели. В Changes переключатель **Folders / Files** включает дерево или список без папок; стрелка возле **Changes** сворачивает весь раздел, кнопка справа от переключателя — все папки. Выбранный режим и состояние раздела сохраняются.
-- Очередь ревью от агента: нуждающиеся в проверке файлы сверху, обычные изменения и менее важные файлы ниже. Причина и автор видны при открытии файла; изменения после оценки помечаются отдельно.
-- Split / unified diff, подсветка изменённых слов, раскрытие контекста, перенос строк и поиск.
-- Полный файл с подсветкой добавлений и удалений, включая удалённые строки для контекста.
-- Превью PNG, JPG/JPEG и WebP: оригинал и новая версия рядом или друг под другом, целая картинка в Full file, прозрачность, размеры и вес, Fit / 100% и масштаб 25–400%.
-- Рабочие изменения относительно HEAD, staged-изменения и сравнение с любой локальной или remote-веткой от общего предка, включая текущие локальные правки.
-- Новые, удалённые и переименованные файлы, репозитории без первого коммита.
-- Отметки просмотренных файлов с автоматическим сбросом при изменении версии файла.
-- Комментарии на исходной или изменённой стороне, сохранение ревью на диске, копирование обратной связи.
-- Stage / unstage файлов, stage all, коммит staged-файлов. Git hooks и настройки подписания коммитов учитываются обычным Git.
-- Четыре темы, размер шрифта, горячие клавиши, command palette, сохранение настроек.
-- Настоящий MCP через stdio; один исполняемый файл для приложения и MCP-моста. Node.js готовому приложению не нужен.
+## Features
 
-## Запуск
+- Changed-file explorer with `+N / −M` counts, filtering, tabs and a resizable sidebar. **Folders / Files** switches between a folder tree and a flat list. The arrow next to **Changes** folds the entire section; the button beside the view switch folds all folders. The layout and section state are saved.
+- Agent-guided review queue: files needing validation come first, followed by ordinary changes and lower-priority files. Each suggestion shows its author and reason; files changed since the assessment are marked.
+- Split and unified diffs, word-level change highlighting, expandable context, word wrap and search.
+- Full-file view with additions and deletions highlighted, including removed lines for context.
+- PNG, JPG/JPEG and WebP previews: original and modified images side by side or stacked, Full file view, transparency, dimensions and file size, Fit / 100%, and zoom from 25–400%.
+- Working-tree changes against HEAD, staged changes, and comparisons with local or remote branches from their common ancestor, including current local edits.
+- Added, deleted and renamed files, and repositories without an initial commit.
+- Reviewed markers that reset automatically when a file's version changes.
+- Comments on the original or modified side, reviews saved locally, and feedback you can copy for your agent.
+- Stage / unstage individual files, stage all changes, and commit staged files. Regular Git hooks and commit-signing settings apply.
+- Four themes, adjustable font size, keyboard shortcuts, a command palette and saved preferences.
+- MCP over stdio, with the same executable serving as both the desktop app and MCP bridge. The installed app does not require Node.js.
 
-Для готового приложения нужен Git в PATH. На Windows используется системный WebView2, на macOS — WKWebView. Архитектура основана на [Tauri 2](https://v2.tauri.app/start/).
+## Getting started
 
-В этой рабочей папке Windows-исполняемый файл собирается в `src-tauri/target/release/patchwork.exe`.
+The installed app requires Git on your PATH. Windows uses the system WebView2 runtime; macOS uses WKWebView. The app is built with [Tauri 2](https://v2.tauri.app/start/).
 
-Для разработки нужны Node.js 22+, Rust stable и [системные зависимости Tauri](https://v2.tauri.app/start/prerequisites/): MSVC Build Tools на Windows, Xcode Command Line Tools на macOS.
+A local Windows build produces `src-tauri/target/release/patchwork.exe`.
+
+For development, install Node.js 22+, stable Rust and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/): MSVC Build Tools on Windows or Xcode Command Line Tools on macOS.
 
 ```sh
 npm ci
 npm run desktop
 ```
 
-Интерактивный браузерный демо-режим:
+To run the interactive browser demo:
 
 ```sh
 npm run dev
 ```
 
-Адрес: `http://127.0.0.1:1420`. Демо явно отмечено в UI. Оно работает с образцами, не читает локальные репозитории и не делает настоящие коммиты.
+Open `http://127.0.0.1:1420`. The UI labels this as a demo workspace. It uses sample files, cannot read local repositories and does not create real commits.
 
 ## MCP
 
-Откройте Patchwork, нажмите **Connect agent**, выберите Codex, Claude Desktop или Cursor и скопируйте конфигурацию с точным путём к исполняемому файлу. После перезапуска MCP-соединения агент появится в панели.
+Open Patchwork, click **Connect agent**, select Codex, Claude Desktop or Cursor, and copy the configuration containing the exact executable path. Restart your agent's MCP connection; the connected agent will then appear in Patchwork.
 
-Пример для Codex, в `~/.codex/config.toml` ([официальная документация](https://developers.openai.com/codex/mcp/)):
+For Codex, add the following to `~/.codex/config.toml` ([official documentation](https://developers.openai.com/codex/mcp/)):
 
 ```toml
 [mcp_servers.patchwork]
@@ -50,9 +52,9 @@ command = "C:\\path\\to\\patchwork.exe"
 args = ["--mcp"]
 ```
 
-Для macOS используйте путь к бинарному файлу внутри bundle: `/Applications/Patchwork.app/Contents/MacOS/patchwork`. Панель в приложении показывает текущий реальный путь автоматически.
+On macOS, use the executable inside the app bundle: `/Applications/Patchwork.app/Contents/MacOS/patchwork`. Patchwork's connection panel automatically shows the actual executable path.
 
-Cursor использует `~/.cursor/mcp.json`; Claude Desktop — `claude_desktop_config.json`. Добавьте сервер в существующий `mcpServers`, сохранив другие записи.
+Cursor uses `~/.cursor/mcp.json`; Claude Desktop uses `claude_desktop_config.json`. Add Patchwork to the existing `mcpServers` object, keeping your other servers.
 
 ```json
 {
@@ -65,38 +67,38 @@ Cursor использует `~/.cursor/mcp.json`; Claude Desktop — `claude_des
 }
 ```
 
-| Инструмент | Что делает |
+| Tool | What it does |
 | --- | --- |
-| `open_repository` | Открывает Git-репозиторий по абсолютному пути |
-| `list_changes` | Список файлов, статистика и staging state |
-| `get_diff` | Unified patch и исходное/новое содержимое |
-| `get_file` | Полное исходное/новое содержимое |
-| `show_diff` | Фокусирует приложение, выбирает файл, строку и режим |
-| `get_review` | Читает приоритеты, отметки ревью и комментарии человека |
-| `add_comment` | Добавляет заметку к файлу и строке |
-| `set_review_plan` | Задаёт очередь проверки файлов и причины приоритетов |
+| `open_repository` | Opens a Git repository by absolute path |
+| `list_changes` | Lists changed files, line counts and staging state |
+| `get_diff` | Returns a unified patch and original/modified contents |
+| `get_file` | Reads complete original/modified contents |
+| `show_diff` | Focuses the app and selects a file, line and view mode |
+| `get_review` | Reads priorities, reviewed markers and human comments |
+| `add_comment` | Adds a note to a file and line |
+| `set_review_plan` | Sets file-review priorities with reasons |
 
-Пример инструкции агенту:
+Example instruction for your agent:
 
-> Открой репозиторий /path/to/repo в Patchwork. Сравни с main и через set_review_plan отметь файлы, которые я должен провалидировать, и менее важные. Объясни, что проверять. Покажи самый важный файл. После моего ревью прочитай get_review и исправь замечания.
+> Open /path/to/repo in Patchwork. Compare it with main and use set_review_plan to mark the files I should validate and those with lower priority. Explain what to check. Show the most important file. After my review, read get_review and address the feedback.
 
-Пример аргументов `set_review_plan`:
+Example `set_review_plan` arguments:
 
 ```json
 {
   "base": "main",
   "files": [
-    { "path": "src/api.ts", "priority": "validate", "reason": "Проверить авторизацию и обработку ошибки от сервера." },
-    { "path": "README.md", "priority": "low", "reason": "Обновлено описание запуска." }
+    { "path": "src/api.ts", "priority": "validate", "reason": "Check authorization and server error handling." },
+    { "path": "README.md", "priority": "low", "reason": "Updated the getting-started instructions." }
   ]
 }
 ```
 
-Приоритеты: `validate`, `normal`, `low`. Список заменяет предыдущий план для этой пары репозиторий/сравнение; остальные файлы остаются обычными. Пустой `files` очищает план. Файлы должны присутствовать в `list_changes` для выбранного сравнения. Это рекомендации агента; отметку «просмотрено» ставит человек.
+Priorities are `validate`, `normal` and `low`. The list replaces the previous plan for this repository/comparison pair; files outside the plan keep normal priority. An empty `files` array clears the plan. Every listed file must be present in `list_changes` for the selected comparison. The plan contains agent suggestions; the human sets reviewed markers.
 
-Транспорт — [MCP stdio](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports). Внутренний мост слушает только loopback на случайном порту и требует локальный случайный токен. Этот порт не является публичным MCP HTTP endpoint. MCP-инструменты не изменяют исходники и не выполняют коммиты; Git-записи доступны через действия человека в UI.
+The transport is [MCP stdio](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports). The internal bridge listens only on loopback, uses a random port and requires a local random token. This port is not a public MCP HTTP endpoint. MCP tools do not edit source files or create commits; Git writes are available through human actions in the UI.
 
-## Сборка и проверки
+## Building and testing
 
 ```sh
 npm test
@@ -106,43 +108,43 @@ npm run tauri -- build --no-bundle
 node scripts/smoke-mcp.mjs
 ```
 
-Smoke-тест запускает настоящее приложение и MCP-процесс, проверяет handshake, все восемь инструментов, приоритеты и счётчики строк, открытие diff, комментарии, сохранение и границы файлового доступа. Использует отдельный тестовый репозиторий и данные в `.qa/`.
+The smoke test launches the real desktop app and MCP process. It checks the handshake, all eight tools, priorities and line counts, diff navigation, comments, persistence and file-access boundaries. It uses a separate test repository and data under `.qa/`.
 
-Windows installer:
+Build a Windows installer:
 
 ```sh
 npm run tauri -- build --bundles nsis
 ```
 
-macOS, на Mac:
+Build the macOS app and disk image on a Mac:
 
 ```sh
 npm run tauri -- build --bundles app,dmg
 ```
 
-В `.github/workflows/build.yml` подготовлены отдельные сборки Windows x64, macOS Apple Silicon и Intel. Workflow сохраняет артефакты, не публикует releases. macOS-сборки нужно проверить на Mac; подпись Apple Developer и notarization для публичной дистрибуции здесь не настроены. В CI используется ad-hoc signing.
+`.github/workflows/build.yml` builds Windows x64, macOS Apple Silicon and macOS Intel bundles separately. It uploads artifacts without publishing releases. The macOS app still needs runtime testing on a Mac. Apple Developer signing and notarization for public distribution are not configured; CI uses ad-hoc signing.
 
-## Клавиши
+## Keyboard shortcuts
 
-| Клавиши | Действие |
+| Shortcut | Action |
 | --- | --- |
-| Ctrl/Cmd K или P | Файлы и команды |
-| Ctrl/Cmd O | Открыть репозиторий |
-| Ctrl/Cmd B | Панель файлов |
-| Ctrl/Cmd F | Поиск в файле |
-| Ctrl/Cmd Shift F | Фильтр файлов |
-| Ctrl/Cmd Shift R | Обновить изменения |
-| Ctrl/Cmd , | Настройки |
-| Ctrl/Cmd Enter | Открыть коммит; в поле сообщения — создать коммит |
-| J / K | Следующий / предыдущий файл |
-| Alt ↓ / Alt ↑ | Следующее / предыдущее изменение |
-| D | Diff / полный файл |
-| R | Отметка ревью |
+| Ctrl/Cmd K or P | Find a file or run a command |
+| Ctrl/Cmd O | Open a repository |
+| Ctrl/Cmd B | Toggle the file explorer |
+| Ctrl/Cmd F | Find in the current file |
+| Ctrl/Cmd Shift F | Filter changed files |
+| Ctrl/Cmd Shift R | Refresh changes |
+| Ctrl/Cmd , | Open settings |
+| Ctrl/Cmd Enter | Open the commit dialog; submit a commit from the message field |
+| J / K | Next / previous file |
+| Alt ↓ / Alt ↑ | Next / previous change |
+| D | Toggle Diff / Full file |
+| R | Toggle the reviewed marker |
 
-## Локальные данные и пределы
+## Local data and limits
 
-Комментарии и ревью сохраняются в `%APPDATA%/Patchwork` на Windows, `~/Library/Application Support/Patchwork` на macOS. Темы и настройки — в локальном хранилище WebView. Для отдельного или portable-профиля можно задать `PATCHWORK_DATA_DIR`; MCP-процессу нужно передать ту же переменную.
+Comments and reviews are saved in `%APPDATA%/Patchwork` on Windows and `~/Library/Application Support/Patchwork` on macOS. Themes and preferences use the WebView's local storage. Set `PATCHWORK_DATA_DIR` for a separate or portable profile; pass the same environment variable to the MCP process.
 
-Текстовый предпросмотр ограничен 2 MB на сторону файла, изображения PNG/JPEG/WebP — 20 MB на сторону. Изображения читаются локально и передаются в UI; MCP `get_file` остаётся текстовым и не отправляет агенту base64 картинок. Другие бинарные файлы и файлы не в UTF-8 получают отдельное состояние без попытки отобразить их как код. Длинные diff виртуализируются; расчёт изменений ограничен по времени. Подсветка синтаксиса — лёгкий токенизатор, без language server. Автообновление Git работает каждые 4 секунды, пока приложение видно; содержимое файла перечитывается при изменении его версии.
+Text previews are limited to 2 MB per side; PNG/JPEG/WebP previews allow up to 20 MB per side. Images are read locally and sent to the UI. MCP `get_file` remains text-only and does not send image base64 to your agent. Other binary files and non-UTF-8 files display a separate state instead of being rendered as code. Long diffs are virtualized, and diff calculation has a time limit. Syntax highlighting uses a lightweight tokenizer without a language server. Git state refreshes every four seconds while the app is visible; file contents reload when their version changes.
 
-Приложение не отправляет код в облако. Соединённый агент получает содержимое только через явно вызванные MCP-инструменты.
+Patchwork does not send your code to the cloud. A connected agent receives content only through explicitly invoked MCP tools.
