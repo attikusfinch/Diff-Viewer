@@ -6,7 +6,7 @@ A local diff viewer for Windows and macOS. Your agent writes the code; you revie
 
 ## Features
 
-- Changed-file explorer with `+N / −M` counts, filtering, tabs and a resizable sidebar. **Folders / Files** switches between a folder tree and a flat list. The arrow next to **Changes** folds the entire section; the button beside the view switch folds all folders. The layout and section state are saved.
+- Changed-file explorer with `+N / −M` counts, filtering, tabs and a resizable sidebar. **Files** is the default view; **Folders / Files** switches between a folder tree and a flat list. The arrow next to **Changes** folds the entire section; the button beside the view switch folds all folders. The layout and section state are saved.
 - Agent-guided review queue: files needing validation come first, followed by ordinary changes and lower-priority files. Each suggestion shows its author and reason; files changed since the assessment are marked.
 - Split and unified diffs, word-level change highlighting, expandable context, word wrap and search.
 - Full-file view with additions and deletions highlighted, including removed lines for context.

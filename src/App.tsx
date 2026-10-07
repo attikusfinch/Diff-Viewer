@@ -14,7 +14,7 @@ import type { FileTreeHandle } from './components/FileTree';
 import Modal from './components/Modal';
 import type { Connection, FileContent, Mode, Preferences, Review, ShowDiff, Snapshot } from './types';
 
-const defaults: Preferences = {theme:'graphite',fontSize:13,wrap:false,layout:'split',context:4,sidebarWidth:272,filesLayout:'tree',changesExpanded:true};
+const defaults: Preferences = {theme:'graphite',fontSize:13,wrap:false,layout:'split',context:4,sidebarWidth:272,filesLayout:'list',changesExpanded:true};
 const themeNames = {graphite:'Graphite',midnight:'Midnight',light:'Daylight',terminal:'Terminal'};
 const mod = /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl';
 function stored<T>(key:string,fallback:T):T { try {return JSON.parse(localStorage.getItem(key)??'null')??fallback}catch{return fallback} }
@@ -24,7 +24,7 @@ function validatedPreferences():Preferences {
   return {...defaults,...initialPreferences, theme:initialPreferences.theme in themeNames ? initialPreferences.theme : 'graphite',
     fontSize:Math.max(11,Math.min(18,Number(initialPreferences.fontSize)||13)),
     sidebarWidth:Math.max(220,Math.min(420,Number(initialPreferences.sidebarWidth)||272)),
-    filesLayout:initialPreferences.filesLayout==='list'?'list':'tree',
+    filesLayout:initialPreferences.filesLayout==='tree'?'tree':'list',
     changesExpanded:initialPreferences.changesExpanded!==false};
 }
 const languages:Record<string,string>={ts:'TypeScript',tsx:'TypeScript React',js:'JavaScript',jsx:'JavaScript React',rs:'Rust',json:'JSON',md:'Markdown',py:'Python',css:'CSS',html:'HTML',toml:'TOML',yml:'YAML',yaml:'YAML'};
